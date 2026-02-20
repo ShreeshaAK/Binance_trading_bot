@@ -1,0 +1,156 @@
+# Binance Futures Testnet — Trading Bot
+
+A clean, production-structured Python trading bot for **Binance USDT-M Futures
+Testnet** with a full-featured argparse CLI, typed models, structured logging,
+and comprehensive error handling.
+
+---
+
+## Architecture
+
+```
+trading_bot/
+│
+├── config.py        ← Immutable Config dataclass; reads .env / env vars
+├── logger.py        ← Two-channel logger: coloured console + rotating file
+├── client.py        ← Signed HTTP layer (HMAC-SHA256, error/network exceptions)
+├── models.py        ← Typed dataclasses for requests & responses + validation
+├── bot.py           ← High-level TradingBot service (business logic only)
+│
+├── cli.py           ← argparse CLI — all user interaction lives here
+├── main.py          ← Programmatic demo that calls cli.main()
+│
+├── requirements.txt
+├── .env.example
+└── logs/            ← Auto-created; rotating log files land here
+```
+
+### Layer responsibilities
+
+| Layer | Does | Does not |
+|---|---|---|
+| `config.py` | Load credentials, expose constants | Touch network |
+| `logger.py` | Configure handlers once | Contain business logic |
+| `client.py` | Sign + send HTTP, raise typed errors | Know about orders or positions |
+| `models.py` | Validate input, serialise to API params, parse responses | Touch network |
+| `bot.py` | Compose client calls into domain operations | Print to stdout |
+| `cli.py` | Parse argv, print formatted output, call bot | Contain business logic |
+
+---
+
+## Quick Start
+
+### 1. Get testnet credentials
+
+1. Visit [testnet.binancefuture.com](https://testnet.binancefuture.com)
+2. Register / log in → API Management → generate a key pair
+
+### 2. Install dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### 3. Configure credentials
+
+```bash
+cp .env.example .env
+# open .env and paste your API key + secret
+```
+
+Or export directly:
+```bash
+export BINANCE_TESTNET_API_KEY=your_key
+export BINANCE_TESTNET_API_SECRET=your_secret
+```
+
+---
+
+## CLI Reference
+
+### order — Place a MARKET or LIMIT order
+
+```bash
+python cli.py order --symbol BTCUSDT --side BUY  --type MARKET --qty 0.001
+python cli.py order --symbol ETHUSDT --side SELL --type LIMIT  --qty 0.05 --price 3200
+python cli.py order --symbol BTCUSDT --side BUY  --type LIMIT  --qty 0.001 --price 90000 --tif IOC
+```
+
+Flags: --symbol, --side (BUY|SELL), --type (MARKET|LIMIT), --qty,
+       --price (required for LIMIT), --tif (GTC|IOC|FOK|GTX),
+       --position-side (BOTH|LONG|SHORT), --reduce-only
+
+### balance — Show wallet balances
+```bash
+python cli.py balance
+```
+
+### positions — Show open positions
+```bash
+python cli.py positions
+python cli.py positions --symbol BTCUSDT
+```
+
+### orders — List open orders
+```bash
+python cli.py orders --symbol BTCUSDT
+```
+
+### cancel — Cancel orders
+```bash
+python cli.py cancel --symbol BTCUSDT --order-id 3425621987
+python cli.py cancel --symbol BTCUSDT --all
+```
+
+### price — Get mark price
+```bash
+python cli.py price --symbol BTCUSDT
+```
+
+### leverage — Set leverage (1-125)
+```bash
+python cli.py leverage --symbol BTCUSDT --leverage 20
+```
+
+---
+
+## Error Handling
+
+| Situation | Exception | Example message |
+|---|---|---|
+| Bad input | `ValueError` / argparse error | LIMIT orders require --price |
+| Binance API error | `BinanceAPIError(code, msg)` | [-2019] Margin insufficient |
+| Network / timeout | `NetworkError` | Connection failed / timed out |
+
+Exit codes: 0 = success, 1 = API/network failure, 2 = input/validation error
+
+---
+
+## Logging
+
+- **Console**: INFO and above, ANSI-coloured
+- **File** (`logs/bot.log`): DEBUG and above, plain text, rotates at 5 MB
+
+Every HTTP request and response body is logged at DEBUG level to the file.
+
+---
+
+## Library Usage
+
+```python
+from decimal import Decimal
+from bot import TradingBot
+from models import OrderSide
+
+bot = TradingBot()
+order = bot.place_market_order("BTCUSDT", OrderSide.BUY, Decimal("0.001"))
+print(order.order_id, order.status)
+
+order = bot.place_limit_order("ETHUSDT", OrderSide.SELL,
+                               Decimal("0.05"), price=Decimal("3200"))
+
+balances  = bot.get_account_balance()
+positions = bot.get_positions("BTCUSDT")
+price     = bot.get_price("BTCUSDT")
+bot.cancel_all_open_orders("BTCUSDT")
+```
