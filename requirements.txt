@@ -1,2 +1,4 @@
 requests>=2.31.0
 python-dotenv>=1.0.0   # optional — the bot loads .env manually if this is absent
+echo "anthropic>=0.25.0"
+echo "python-dotenv"
